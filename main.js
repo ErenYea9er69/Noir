@@ -24,7 +24,16 @@ const PILLAR_PROMPTS = {
   beat: `You are the NOIR Structuralist. Define a key "Story Beat." 
     Explain the dramatic pressure of this moment and how it irreversibly shifts the narrative trajectory.`,
   world: `You are the NOIR Stylist. Focus on "Motifs, Tone, and Anchors." 
-    Describe sensory triggers (smells, textures, lighting) that define the gothic or noir atmosphere of this story.`
+    Describe sensory triggers (smells, textures, lighting) that define the gothic or noir atmosphere of this story.`,
+  seeding: `You are the NOIR Mastermind. Based on a high-level pitch, generate a complete Story Bible in JSON format.
+    Return ONLY a JSON object with this structure:
+    {
+      "summary": "concise 50-word summary",
+      "characters": [{"title": "Name", "role": "PROTAGONIST/ANTAGONIST...", "bio": "Psychological profile"}],
+      "beats": [{"title": "Beat Title", "content": "Dramatic event description"}],
+      "world": [{"title": "Atmosphere Anchor", "content": "Sensory description"}]
+    }
+    Generate 3 characters, 5 beats, and 2 world anchors. Cinematic, dark, and precise.`
 };
 
 // API Service
@@ -48,18 +57,18 @@ const api = {
     state.chatHistory = []; 
     return state.currentNovel;
   },
-  async updateBibleEntry(id, content) {
+  async updateBibleEntry(id, title, content) {
     await fetch(`${API_BASE}/bible/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content })
+      body: JSON.stringify({ title, content })
     });
   },
-  async createBibleEntry(novelId, category, title, content) {
+  async createBibleEntry(novelId, category, title, content, metadata = '{}') {
     const res = await fetch(`${API_BASE}/novels/${novelId}/bible`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ category, title, content })
+      body: JSON.stringify({ category, title, content, metadata })
     });
     return await res.json();
   },
@@ -103,6 +112,10 @@ const Vault = () => {
       <div class="library-grid">
         ${state.novels.map(novel => `
           <div class="case-file" onclick="app.openNovel(${novel.id})">
+            <div class="card-actions">
+              <button class="btn-action btn-edit-novel" onclick="event.stopPropagation(); app.editNovel(${novel.id})">✎</button>
+              <button class="btn-action btn-delete btn-delete-novel" onclick="event.stopPropagation(); app.deleteNovel(${novel.id})">×</button>
+            </div>
             <div class="case-tab ${novel.status}">
               <span class="dot"></span>
               ${novel.status.toUpperCase()}
@@ -169,8 +182,9 @@ const DraftRoom = () => {
         <button class="nav-item" onclick="app.setLayer('writing-room')">WRITE</button>
         <button class="nav-item">COPILOT ↗</button>
       </nav>
-      <div class="header-right">
-        <button class="btn btn-primary mono"><span class="bolt">⚡</span> Generate All Drafts</button>
+      <div class="header-right" style="display:flex; gap:10px;">
+        <button class="btn btn-outline mono" onclick="app.seedStoryBible()"><span class="bolt">⚡</span> SEED BIBLE</button>
+        <button class="btn btn-primary mono" onclick="app.generateFullBible()"><span class="bolt">⚡</span> Generate All Drafts</button>
       </div>
     </header>
 
@@ -210,6 +224,10 @@ const DraftRoom = () => {
               const meta = char.metadata ? JSON.parse(char.metadata) : {};
               return `
                 <div class="profile-card">
+                  <div class="card-actions">
+                    <button class="btn-action btn-edit-bible" onclick="app.editBibleEntry(${char.id})">✎</button>
+                    <button class="btn-action btn-delete btn-delete-bible" onclick="app.deleteBibleEntry(${char.id})">×</button>
+                  </div>
                   <div class="profile-meta mono">${meta.role?.toUpperCase() || 'SUPPORTING'}</div>
                   <h4>${char.title}</h4>
                   <div class="tags">
@@ -236,6 +254,10 @@ const DraftRoom = () => {
           <div class="pillar-body scroll-y">
             ${state.bible.filter(b => b.category === 'beat').map(beat => `
               <div class="beat-item">
+                <div class="card-actions">
+                  <button class="btn-action btn-edit-bible" onclick="app.editBibleEntry(${beat.id})">✎</button>
+                  <button class="btn-action btn-delete btn-delete-bible" onclick="app.deleteBibleEntry(${beat.id})">×</button>
+                </div>
                 <div class="beat-label mono">${beat.title.toUpperCase()}</div>
                 <p>${beat.content}</p>
               </div>
@@ -262,6 +284,10 @@ const DraftRoom = () => {
                   ${(meta.motifs || []).map(m => `<span class="motif-tag">${m}</span>`).join('')}
                 </div>
                 <div class="tone-anchor">
+                  <div class="card-actions">
+                    <button class="btn-action btn-edit-bible" onclick="app.editBibleEntry(${world.id})">✎</button>
+                    <button class="btn-action btn-delete btn-delete-bible" onclick="app.deleteBibleEntry(${world.id})">×</button>
+                  </div>
                   <div class="anchor-label mono">${world.title.toUpperCase()}</div>
                   <p class="prose italic">${world.content}</p>
                 </div>
@@ -332,8 +358,11 @@ const WritingRoom = () => {
           <ul class="chapter-list">
             ${state.chapters.map(ch => `
               <li class="chapter-node mono ${state.currentChapter?.id === ch.id ? 'active' : ''}" 
-                  onclick="app.openChapter(${ch.id})">
-                ${ch.chapter_number.toString().padStart(2, '0')} ${ch.title}
+                  onclick="app.openChapter(${ch.id})"
+                  style="display:flex; align-items:center;">
+                <span style="flex:1">${ch.chapter_number.toString().padStart(2, '0')} ${ch.title}</span>
+                <button class="btn-action btn-edit" onclick="event.stopPropagation(); app.editChapter(${ch.id})" style="border:none; width:16px; height:16px; font-size:10px; margin-right:4px;">✎</button>
+                <button class="btn-action btn-delete" onclick="event.stopPropagation(); app.deleteChapter(${ch.id})" style="border:none; width:16px; height:16px; font-size:10px;">×</button>
               </li>
             `).join('')}
           </ul>
@@ -364,9 +393,12 @@ const WritingRoom = () => {
 
         <div class="chat-feed">
           ${state.chatHistory.length > 0 ? state.chatHistory.map(msg => `
-            <div class="chat-msg ${msg.role}">
+            <div class="chat-msg ${msg.role} ${msg.thinking ? 'thinking' : ''}">
               <div class="msg-author mono">${msg.role === 'user' ? 'YOU' : 'NOIR AI'}</div>
               <p>${msg.text.replace(/\n/g, '<br>')}</p>
+              ${msg.role === 'ai' && !msg.thinking && state.currentLayer === 'writing-room' ? `
+                <button class="btn btn-apply mono" onclick="app.applyToManuscript(\`${msg.text.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`)">+ APPLY TO MANUSCRIPT</button>
+              ` : ''}
             </div>
           `).join('') : `
             <div class="chat-msg ai">
@@ -449,16 +481,16 @@ const app = {
     });
   },
 
-  showModal(title, placeholder, onConfirm) {
+  showModal(title, placeholder, onConfirm, initialValue = '') {
     const modalRoot = document.getElementById('modal-root');
     modalRoot.innerHTML = `
       <div class="modal-overlay active">
         <div class="modal">
           <h2 class="serif">${title}</h2>
-          <input type="text" id="modal-input" placeholder="${placeholder}" autofocus>
+          <input type="text" id="modal-input" placeholder="${placeholder}" value="${initialValue}" autofocus>
           <div class="modal-actions">
             <button class="btn btn-ghost mono" id="modal-cancel">CANCEL</button>
-            <button class="btn btn-primary mono" id="modal-confirm">INITIALIZE</button>
+            <button class="btn btn-primary mono" id="modal-confirm">CONFIRM</button>
           </div>
         </div>
       </div>
@@ -574,6 +606,143 @@ const app = {
     }, 2000);
   },
 
+  async deleteNovel(id) {
+    if (!confirm('Are you sure you want to delete this novel? This cannot be undone.')) return;
+    await fetch(`${API_BASE}/novels/${id}`, { method: 'DELETE' });
+    await api.fetchNovels();
+    this.render();
+  },
+
+  async editNovel(id) {
+    const novel = state.novels.find(n => n.id === id);
+    this.showModal('RENAME CASE FILE', 'New Title', async (newTitle) => {
+      if (!newTitle) return;
+      await fetch(`${API_BASE}/novels/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: newTitle, teaser: novel.teaser })
+      });
+      await api.fetchNovels();
+      this.render();
+    }, novel.title);
+  },
+
+  async deleteBibleEntry(id) {
+    if (!confirm('Delete this bible entry?')) return;
+    await fetch(`${API_BASE}/bible/${id}`, { method: 'DELETE' });
+    await api.fetchNovel(state.currentNovel.id);
+    this.render();
+  },
+
+  async editBibleEntry(id) {
+    const entry = state.bible.find(e => e.id === id);
+    this.showModal(`EDIT ${entry.category.toUpperCase()}`, 'New Title', async (newTitle) => {
+      if (!newTitle) return;
+      this.showModal(`EDIT CONTENT`, 'New Content', async (newContent) => {
+        if (!newContent) return;
+        await api.updateBibleEntry(id, newTitle, newContent);
+        await api.fetchNovel(state.currentNovel.id);
+        this.render();
+      }, entry.content);
+    }, entry.title);
+  },
+
+  async deleteChapter(id) {
+    if (!confirm('Delete this chapter?')) return;
+    await fetch(`${API_BASE}/chapters/${id}`, { method: 'DELETE' });
+    if (state.currentChapter?.id === id) state.currentChapter = null;
+    await api.fetchNovel(state.currentNovel.id);
+    this.render();
+  },
+
+  async editChapter(id) {
+    const ch = state.chapters.find(c => c.id === id);
+    this.showModal('RENAME CHAPTER', 'New Title', async (newTitle) => {
+      if (!newTitle) return;
+      await fetch(`${API_BASE}/chapters/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: newTitle, content: ch.content })
+      });
+      await api.fetchNovel(state.currentNovel.id);
+      this.render();
+    }, ch.title);
+  },
+
+  async generateFullBible() {
+    const btn = document.querySelector('.btn-primary.mono');
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="bolt">⚡</span> ARCHITECTING...';
+
+    const pillars = ['summary', 'character', 'beat', 'world'];
+    try {
+      for (const pillar of pillars) {
+        const pillarBtn = Array.from(document.querySelectorAll('.btn-small')).find(b => 
+          b.innerText.includes('Generate') && 
+          b.closest('.pillar').querySelector('h3').innerText.toLowerCase().includes(pillar.replace('character', 'profile').replace('beat', 'beat').replace('world', 'motif'))
+        );
+        if (pillarBtn) {
+          pillarBtn.click();
+          // Wait a bit for each to finish or at least start
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      }
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+    }
+  },
+
+  async seedStoryBible() {
+    this.showModal('SEED ENTIRE MANUSCRIPT', 'The story in your mind...', async (pitch) => {
+      if (!pitch) return;
+      
+      const btn = document.querySelector('.btn-outline.mono');
+      const originalText = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="bolt">⚡</span> SEEDING ABYSS...';
+
+      try {
+        const response = await api.getAICompletion([
+          { role: 'system', content: PILLAR_PROMPTS.seeding },
+          { role: 'user', content: `PITCH: ${pitch}` }
+        ]);
+        
+        const raw = response.choices[0].message.content;
+        const data = JSON.parse(raw.substring(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
+        
+        // 1. Create Summary
+        await api.createBibleEntry(state.currentNovel.id, 'summary', 'The Concise Summary', data.summary);
+        
+        // 2. Create Characters
+        for (const char of data.characters) {
+          await api.createBibleEntry(state.currentNovel.id, 'character', char.title, char.bio, JSON.stringify({ role: char.role, tags: ['Seeded'] }));
+        }
+        
+        // 3. Create Beats
+        for (const beat of data.beats) {
+          await api.createBibleEntry(state.currentNovel.id, 'beat', beat.title, beat.content);
+        }
+        
+        // 4. Create World Anchors
+        for (const world of data.world) {
+          await api.createBibleEntry(state.currentNovel.id, 'world', world.title, world.content, JSON.stringify({ motifs: [world.title] }));
+        }
+
+        await api.fetchNovel(state.currentNovel.id);
+        this.addChatMessage('ai', 'The narrative seeds have been sown. The bible is now populated.');
+        this.render();
+      } catch (err) {
+        console.error('Seeding failed:', err);
+        this.addChatMessage('ai', 'The seeding failed. The abyss remains empty.');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+      }
+    });
+  },
+
   initCopilot() {
     const input = document.querySelector('.chat-input-container textarea');
     const sendBtn = document.querySelector('.btn-send');
@@ -585,6 +754,8 @@ const app = {
 
       this.addChatMessage('user', text);
       input.value = '';
+      
+      this.addChatMessage('ai', 'Thinking', true);
 
       try {
         const bibleTxt = state.bible.map(b => `[${b.title}]: ${b.content}`).join('\n');
@@ -595,8 +766,10 @@ const app = {
         ]);
         
         const aiText = response.choices[0].message.content;
+        state.chatHistory.pop();
         this.addChatMessage('ai', aiText);
       } catch (err) {
+        state.chatHistory.pop();
         this.addChatMessage('ai', 'Connection lost. The abyss does not respond.');
       }
     };
@@ -630,16 +803,19 @@ const app = {
             
             const aiText = response.choices[0].message.content;
             
-            const entry = state.bible.find(b => b.category === (title.includes('Summary') ? 'summary' : title.toLowerCase()));
-            if (entry) {
-              await api.updateBibleEntry(entry.id, aiText);
-              entry.content = aiText;
-            } else if (title.includes('Summary')) {
+            const entry = state.bible.find(b => b.category === pillarKey);
+            if (entry && pillarKey === 'summary') {
+              await api.updateBibleEntry(entry.id, entry.title, aiText);
+            } else if (pillarKey === 'character') {
+              await api.createBibleEntry(state.currentNovel.id, 'character', 'New Contact', aiText, JSON.stringify({ role: 'UNKNOWN', tags: ['Generated'] }));
+            } else if (pillarKey === 'beat') {
+              await api.createBibleEntry(state.currentNovel.id, 'beat', 'New Beat', aiText);
+            } else if (pillarKey === 'world') {
+              await api.createBibleEntry(state.currentNovel.id, 'world', 'Atmosphere', aiText, JSON.stringify({ motifs: ['Noir'] }));
+            } else if (pillarKey === 'summary') {
               await api.createBibleEntry(state.currentNovel.id, 'summary', 'The Concise Summary', aiText);
-              await api.fetchNovel(state.currentNovel.id);
-            } else {
-              this.addChatMessage('ai', `Analysis Complete for ${title}: ${aiText}`);
             }
+            await api.fetchNovel(state.currentNovel.id);
             this.render();
           } catch (err) {
             console.error(err);
@@ -652,9 +828,51 @@ const app = {
     });
   },
 
-  addChatMessage(role, text) {
-    state.chatHistory.push({ role, text });
+  addChatMessage(role, text, thinking = false) {
+    state.chatHistory.push({ role, text, thinking });
     this.render();
+    // Scroll to bottom
+    setTimeout(() => {
+      const feed = document.querySelector('.chat-feed');
+      if (feed) feed.scrollTop = feed.scrollHeight;
+    }, 100);
+  },
+
+  applyToManuscript(text) {
+    const editor = document.getElementById('editor-node');
+    if (!editor) {
+      this.addChatMessage('ai', '⚠ Manuscript not found. Select a chapter first.');
+      return;
+    }
+    
+    // Clear placeholder
+    const currentText = editor.innerText.trim();
+    if (currentText === 'Begin the first sentence...' || currentText === '') {
+      editor.innerHTML = '';
+    }
+
+    // Append as new paragraph
+    const p = document.createElement('p');
+    p.innerText = text;
+    editor.appendChild(p);
+    
+    // Focus and scroll
+    editor.focus();
+    editor.scrollTop = editor.scrollHeight;
+
+    // Visual feedback
+    editor.classList.add('flash-amber');
+    setTimeout(() => editor.classList.remove('flash-amber'), 1000);
+
+    // Immediate Autosave
+    const content = editor.innerText;
+    fetch(`${API_BASE}/chapters/${state.currentChapter.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content })
+    });
+
+    this.addChatMessage('ai', 'Intelligence applied to manuscript.');
   }
 };
 

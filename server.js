@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import axios from 'axios';
-import db, { getNovels, getNovel, getAgentLogs, createAgentLog } from './database.js';
+import db, { getNovels, getNovel, getAgentLogs, createAgentLog, deleteNovel, updateNovel, deleteBibleEntry, updateBibleEntry, deleteChapter, updateChapter } from './database.js';
 
 dotenv.config();
 
@@ -43,6 +43,25 @@ app.get('/api/novels/:id', (req, res) => {
   }
 });
 
+app.patch('/api/novels/:id', (req, res) => {
+  try {
+    const { title, teaser } = req.body;
+    updateNovel(req.params.id, title, teaser);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/novels/:id', (req, res) => {
+  try {
+    deleteNovel(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/novels/:id/bible', (req, res) => {
   try {
     const entries = db.prepare('SELECT * FROM bible_entries WHERE novel_id = ?').all(req.params.id);
@@ -65,8 +84,17 @@ app.post('/api/novels/:id/bible', (req, res) => {
 
 app.patch('/api/bible/:id', (req, res) => {
   try {
-    const { content } = req.body;
-    db.prepare('UPDATE bible_entries SET content = ? WHERE id = ?').run(content, req.params.id);
+    const { title, content } = req.body;
+    updateBibleEntry(req.params.id, title, content);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/bible/:id', (req, res) => {
+  try {
+    deleteBibleEntry(req.params.id);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -114,8 +142,17 @@ app.post('/api/novels/:id/logs', (req, res) => {
 
 app.patch('/api/chapters/:id', (req, res) => {
   try {
-    const { content } = req.body;
-    db.prepare('UPDATE chapters SET content = ? WHERE id = ?').run(content, req.params.id);
+    const { title, content } = req.body;
+    updateChapter(req.params.id, content, title);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/chapters/:id', (req, res) => {
+  try {
+    deleteChapter(req.params.id);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
