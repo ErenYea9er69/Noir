@@ -14,6 +14,19 @@ const state = {
 
 const API_BASE = 'http://localhost:3001/api';
 
+const PILLAR_PROMPTS = {
+  summary: `You are the NOIR Architect. Your goal is "All Story in Small Words." 
+    Provide a compressed, brutal, cinematic distillation of the narrative arc (approx 50-80 words). 
+    Focus on the "central wound" and the "unavoidable collision". Use short, punchy sentences.`,
+  character: `You are the NOIR Psychologist. Create a "Development Profile." 
+    Focus on the character's core contradiction (e.g., "A priest who no longer believes in God but still believes in sin"). 
+    Detail their "Ghost" (past trauma), "Want" (external goal), and "Need" (internal change).`,
+  beat: `You are the NOIR Structuralist. Define a key "Story Beat." 
+    Explain the dramatic pressure of this moment and how it irreversibly shifts the narrative trajectory.`,
+  world: `You are the NOIR Stylist. Focus on "Motifs, Tone, and Anchors." 
+    Describe sensory triggers (smells, textures, lighting) that define the gothic or noir atmosphere of this story.`
+};
+
 // API Service
 const api = {
   async fetchNovels() {
@@ -312,7 +325,10 @@ const WritingRoom = () => {
         <div class="sidebar-label mono uppercase">Manuscript</div>
         
         <div class="saga-group">
-          <div class="saga-header mono uppercase">Active Sagas</div>
+          <div class="saga-header mono uppercase">
+            Active Sagas
+            <button class="btn btn-small btn-add-chapter" style="margin-left:auto">+</button>
+          </div>
           <ul class="chapter-list">
             ${state.chapters.map(ch => `
               <li class="chapter-node mono ${state.currentChapter?.id === ch.id ? 'active' : ''}" 
@@ -390,6 +406,46 @@ const app = {
           this.openNovel(novel.id);
         });
       }
+
+      // Add Bible Entries
+      if (e.target.closest('.btn-add-character')) {
+        this.showModal('ADD CHARACTER PROFILE', 'Name & Role', async (val) => {
+          if (!val) return;
+          await api.createBibleEntry(state.currentNovel.id, 'character', val, 'New profile...');
+          await api.fetchNovel(state.currentNovel.id);
+          this.render();
+        });
+      }
+      if (e.target.closest('.btn-add-beat')) {
+        this.showModal('DEFINE STORY BEAT', 'Title', async (val) => {
+          if (!val) return;
+          await api.createBibleEntry(state.currentNovel.id, 'beat', val, 'Define the tension...');
+          await api.fetchNovel(state.currentNovel.id);
+          this.render();
+        });
+      }
+      if (e.target.closest('.btn-add-world')) {
+        this.showModal('ANCHOR ATMOSPHERE', 'Theme', async (val) => {
+          if (!val) return;
+          await api.createBibleEntry(state.currentNovel.id, 'world', val, 'Describe the vibe...');
+          await api.fetchNovel(state.currentNovel.id);
+          this.render();
+        });
+      }
+      
+      // Add Chapter
+      if (e.target.closest('.btn-add-chapter')) {
+        this.showModal('INITIALIZE NEW CHAPTER', 'Chapter Title', async (title) => {
+          if (!title) return;
+          await fetch(`${API_BASE}/novels/${state.currentNovel.id}/chapters`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title })
+          });
+          await api.fetchNovel(state.currentNovel.id);
+          this.render();
+        });
+      }
     });
   },
 
@@ -459,7 +515,41 @@ const app = {
   
   async openNovel(id) {
     await api.fetchNovel(id);
+    this.runAgentAnalysis(id);
     this.setLayer('draft-room');
+  },
+
+  async runAgentAnalysis(novelId) {
+    const bibleTxt = state.bible.map(b => `[${b.title}]: ${b.content}`).join('\n');
+    const chapterTxt = state.chapters.map(ch => `Chapter ${ch.chapter_number}: ${ch.content}`).join('\n');
+
+    const agents = [
+      { name: 'The Architect', role: 'Analyze pacing and structural integrity. Look for plot holes.' },
+      { name: 'Psychologist', role: 'Analyze character consistency. Is the dialogue mapping to the profiles?' }
+    ];
+
+    for (const agent of agents) {
+      try {
+        const res = await api.getAICompletion([
+          { role: 'system', content: `You are NOIR Agent: ${agent.name}. Role: ${agent.role}\nContext: ${bibleTxt}\nManuscript: ${chapterTxt}` },
+          { role: 'user', content: `Provide a 1-sentence status update on the current work. If there is a problem, prefix with "⚠ ALERT:".` }
+        ]);
+        const msg = res.choices[0].message.content;
+        const status = msg.includes('⚠') ? 'warning' : 'normal';
+        
+        await fetch(`${API_BASE}/novels/${novelId}/logs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: agent.name, status, message: msg })
+        });
+      } catch (err) {
+        console.error(`Agent ${agent.name} failed:`, err);
+      }
+    }
+    
+    // Refresh logs
+    state.agentLogs = await (await fetch(`${API_BASE}/novels/${novelId}/logs`)).json();
+    this.render();
   },
 
   openChapter(id) {
@@ -480,6 +570,7 @@ const app = {
         body: JSON.stringify({ content })
       });
       console.log('Autosaved.');
+      this.runAgentAnalysis(state.currentNovel.id);
     }, 2000);
   },
 
@@ -496,8 +587,10 @@ const app = {
       input.value = '';
 
       try {
+        const bibleTxt = state.bible.map(b => `[${b.title}]: ${b.content}`).join('\n');
         const response = await api.getAICompletion([
-          { role: 'system', content: 'You are NOIR AI, a cinematic co-writer for dark thrillers. You are helpful, clinical, and precise.' },
+          { role: 'system', content: `You are NOIR AI, a cinematic co-writer for dark thrillers. You are helpful, clinical, and precise. 
+            Story Bible Context:\n${bibleTxt}` },
           { role: 'user', content: text }
         ]);
         
@@ -529,8 +622,9 @@ const app = {
           btn.innerHTML = '<span class="bolt">⚡</span> Thinking...';
 
           try {
+            const pillarKey = title.includes('Summary') ? 'summary' : title.toLowerCase().includes('profile') ? 'character' : title.toLowerCase().includes('beat') ? 'beat' : 'world';
             const response = await api.getAICompletion([
-              { role: 'system', content: `You are NOIR AI. Generate a draft ${title} for a dark thriller.` },
+              { role: 'system', content: PILLAR_PROMPTS[pillarKey] || `You are NOIR AI. Focus on ${title}.` },
               { role: 'user', content: `Current context: ${body ? body.innerText : 'Empty'}. Please expand or create a new one.` }
             ]);
             

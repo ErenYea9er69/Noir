@@ -102,6 +102,16 @@ app.get('/api/novels/:id/logs', (req, res) => {
   }
 });
 
+app.post('/api/novels/:id/logs', (req, res) => {
+  try {
+    const { name, status, message } = req.body;
+    const id = createAgentLog(req.params.id, name, status, message);
+    res.json({ id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.patch('/api/chapters/:id', (req, res) => {
   try {
     const { content } = req.body;
