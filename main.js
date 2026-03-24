@@ -7,7 +7,9 @@ const state = {
   currentChapter: null,
   novels: [],
   bible: [],
-  chapters: []
+  chapters: [],
+  agentLogs: [],
+  chatHistory: []
 };
 
 const API_BASE = 'http://localhost:3001/api';
@@ -20,17 +22,17 @@ const api = {
     return state.novels;
   },
   async fetchNovel(id) {
-    const res = await fetch(`${API_BASE}/novels/${id}`);
-    state.currentNovel = await res.json();
+    const novel = await (await fetch(`${API_BASE}/novels/${id}`)).json();
+    const bible = await (await fetch(`${API_BASE}/novels/${id}/bible`)).json();
+    const chapters = await (await fetch(`${API_BASE}/novels/${id}/chapters`)).json();
+    const logs = await (await fetch(`${API_BASE}/novels/${id}/logs`)).json();
     
-    // Fetch Bible and Chapters
-    const [bibleRes, chapterRes] = await Promise.all([
-      fetch(`${API_BASE}/novels/${id}/bible`),
-      fetch(`${API_BASE}/novels/${id}/chapters`)
-    ]);
-    state.bible = await bibleRes.json();
-    state.chapters = await chapterRes.json();
-    
+    state.currentNovel = novel;
+    state.bible = bible;
+    state.chapters = chapters;
+    state.agentLogs = logs;
+    state.currentChapter = chapters[0] || null;
+    state.chatHistory = []; 
     return state.currentNovel;
   },
   async updateBibleEntry(id, content) {
@@ -258,48 +260,23 @@ const DraftRoom = () => {
 
       <aside class="agents-sidebar">
         <div class="sidebar-label mono uppercase">Agents Running</div>
-        
-        <div class="agent-item active">
-          <div class="agent-info">
-            <span class="dot active"></span>
-            <strong>The Architect</strong>
+        ${state.agentLogs.length > 0 ? state.agentLogs.map(log => `
+          <div class="agent-item ${log.status}">
+            <div class="agent-info">
+              <span class="dot ${log.status === 'normal' ? 'active' : log.status === 'warning' ? 'warn' : 'idle'}"></span>
+              <strong>${log.agent_name}</strong>
+            </div>
+            <p class="agent-status mono">${log.message}</p>
           </div>
-          <p class="agent-status mono">Macro structure scan — Act II pacing normal</p>
-        </div>
-
-        <div class="agent-item warning">
-          <div class="agent-info">
-            <span class="dot warn"></span>
-            <strong>Psychologist</strong>
+        `).join('') : `
+          <div class="agent-item idle">
+            <div class="agent-info">
+              <span class="dot idle"></span>
+              <strong>System</strong>
+            </div>
+            <p class="agent-status mono">Monitoring initialized. Waiting for draft activity.</p>
           </div>
-          <p class="agent-status mono">Tracking Hana across 12 chapters</p>
-          <div class="agent-alert mono">⚠ Motive drift in Ch.8 detected</div>
-        </div>
-
-        <div class="agent-item">
-          <div class="agent-info">
-            <span class="dot idle"></span>
-            <strong>Continuity</strong>
-          </div>
-          <p class="agent-status mono">No timeline errors found</p>
-        </div>
-
-        <div class="agent-item warning">
-          <div class="agent-info">
-            <span class="dot warn"></span>
-            <strong>Atmosphere</strong>
-          </div>
-          <p class="agent-status mono">Tone consistency 87%</p>
-          <div class="agent-alert mono">Ch.6 — Lighter than defined voice</div>
-        </div>
-
-        <div class="agent-item idle">
-          <div class="agent-info">
-            <span class="dot idle"></span>
-            <strong>Dialogue</strong>
-          </div>
-          <p class="agent-status mono">Idle — enable for deep scan</p>
-        </div>
+        `}
       </aside>
     </main>
   `;
@@ -324,7 +301,7 @@ const WritingRoom = () => {
       <div class="header-right mono stats-bar">
         <span>${novel.words.toLocaleString()} words</span>
         <span class="sep">/</span>
-        <span>Ch.8 • Page 5</span>
+        <span>${state.currentChapter ? `Ch. ${state.currentChapter.chapter_number}` : 'No Ch.'}</span>
         <button class="btn btn-ghost">•••</button>
       </div>
     </header>
@@ -365,43 +342,26 @@ const WritingRoom = () => {
       <aside class="copilot-panel">
         <div class="copilot-header">
           <div class="mono uppercase">Copilot</div>
-          <div class="mono x-small">Saga I • Ch.8 • Page 5 in context</div>
-          <button class="btn-close">×</button>
+          <div class="mono x-small">${state.currentChapter ? `Ch. ${state.currentChapter.chapter_number}` : 'Bible'} in focus</div>
+          <button class="btn-close" onclick="app.setLayer('writing-room')">×</button>
         </div>
 
         <div class="chat-feed">
-          <div class="chat-msg user">
-            <div class="msg-author mono">YOU</div>
-            <p>In Saga 1, Chapter 8, page 5 — make Hana's dialogue colder. Remove the grief flashback. It's too soft for this moment.</p>
-          </div>
-
-          <div class="chat-msg ai">
-            <div class="msg-author mono">NOIR AI</div>
-            <p>Agreed. The grief flashback breaks the clinical register you've built for Hana. Here's the revised paragraph — the emotion is still present but compressed into action, not reflection:</p>
-            
-            <div class="diff-block">
-              <div class="diff-old">
-                Her hands were steady, which surprised her. She had expected them to shake, the way they shook the morning her father died, the morning she understood that grief was not sadness but a form of recognition.
-              </div>
-              <div class="diff-new">
-                Her hands were steady. She noted this the way she noted everything: without judgment, without surprise. The steadiness was just information.
-              </div>
+          ${state.chatHistory.length > 0 ? state.chatHistory.map(msg => `
+            <div class="chat-msg ${msg.role}">
+              <div class="msg-author mono">${msg.role === 'user' ? 'YOU' : 'NOIR AI'}</div>
+              <p>${msg.text.replace(/\n/g, '<br>')}</p>
             </div>
-
-            <div class="diff-actions">
-              <button class="btn btn-small btn-primary">✓ Accept</button>
-              <button class="btn btn-small">Reject</button>
+          `).join('') : `
+            <div class="chat-msg ai">
+              <div class="msg-author mono">NOIR AI</div>
+              <p>The abyss is silent. Ask me for analysis, character insights, or narrative steering.</p>
             </div>
-          </div>
-
-          <div class="chat-msg user">
-            <div class="msg-author mono">YOU</div>
-            <p>Good. Also - add a subtle mirror motif somewhere on this page. Should not be obvious.</p>
-          </div>
+          `}
         </div>
 
         <div class="chat-input-container">
-          <div class="context-hint mono">Context: Saga I • Ch.8 • Page 5</div>
+          <div class="context-hint mono">Context: ${state.currentChapter ? state.currentChapter.title : 'General Story Bible'}</div>
           <div class="input-wrapper">
             <textarea placeholder="Ask about any chapter, page, or element..." rows="2"></textarea>
             <button class="btn-send">↑</button>
@@ -599,18 +559,8 @@ const app = {
   },
 
   addChatMessage(role, text) {
-    const feed = document.querySelector('.chat-feed');
-    if (!feed) return;
-
-    const msg = document.createElement('div');
-    msg.className = `chat-msg ${role}`;
-    msg.innerHTML = `
-      <div class="msg-author mono">${role === 'user' ? 'YOU' : 'NOIR AI'}</div>
-      <p>${text.replace(/\n/g, '<br>')}</p>
-    `;
-    
-    feed.appendChild(msg);
-    feed.scrollTop = feed.scrollHeight;
+    state.chatHistory.push({ role, text });
+    this.render();
   }
 };
 

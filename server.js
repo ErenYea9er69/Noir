@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import axios from 'axios';
-import db, { getNovels, getNovel } from './database.js';
+import db, { getNovels, getNovel, getAgentLogs, createAgentLog } from './database.js';
 
 dotenv.config();
 
@@ -88,6 +88,15 @@ app.post('/api/novels/:id/chapters', (req, res) => {
     const id = db.prepare('INSERT INTO chapters (novel_id, title, saga_name, chapter_number) VALUES (?, ?, ?, ?)')
       .run(req.params.id, title, saga_name || 'Active Sagas', chapter_number || 1).lastInsertRowid;
     res.json({ id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/novels/:id/logs', (req, res) => {
+  try {
+    const logs = getAgentLogs(req.params.id);
+    res.json(logs);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
