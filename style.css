@@ -914,3 +914,63 @@ h1, h2, h3, .serif {
 
 .x-small { font-size: 9px; }
 .sep { margin: 0 4px; }
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.modal-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.modal {
+  background: var(--bg-deep);
+  border: 1px solid var(--accent-amber);
+  padding: 40px;
+  width: 100%;
+  max-width: 500px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+}
+
+.modal h2 {
+  font-size: 24px;
+  margin-bottom: 30px;
+  letter-spacing: 0.1em;
+}
+
+.modal input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border-hairline);
+  color: var(--text-bone);
+  font-family: inherit;
+  font-size: 18px;
+  padding: 10px 0;
+  margin-bottom: 40px;
+  outline: none;
+}
+
+.modal input:focus {
+  border-bottom-color: var(--accent-amber);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 20px;
+}

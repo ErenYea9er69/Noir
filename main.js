@@ -4,41 +4,39 @@ import './style.css';
 const state = {
   currentLayer: 'vault', // 'vault', 'draft-room', 'writing-room'
   currentNovel: null,
-  novels: [
-    {
-      id: 1,
-      title: 'The Surgeon\'s Garden',
-      teaser: 'A detective who thinks like a killer begins to fear she might be one.',
-      status: 'active',
-      chapters: 12,
-      words: 89284,
-      edited: '2h ago',
-      progress: 78,
-      agents: 4
-    },
-    {
-      id: 2,
-      title: 'Hollow Men',
-      teaser: 'Four strangers share one memory of a crime none of them committed.',
-      status: 'draft',
-      chapters: 5,
-      words: 31770,
-      edited: 'yesterday',
-      progress: 45,
-      agents: 2
-    },
-    {
-      id: 3,
-      title: 'Black Meridian',
-      teaser: 'A city disappears. Its residents remember it perfectly.',
-      status: 'bible',
-      chapters: 0,
-      words: 4100,
-      edited: '3 days ago',
-      progress: 12,
-      agents: 'Building bible'
-    }
-  ]
+  novels: []
+};
+
+const API_BASE = 'http://localhost:3001/api';
+
+// API Service
+const api = {
+  async fetchNovels() {
+    const res = await fetch(`${API_BASE}/novels`);
+    state.novels = await res.json();
+    return state.novels;
+  },
+  async fetchNovel(id) {
+    const res = await fetch(`${API_BASE}/novels/${id}`);
+    state.currentNovel = await res.json();
+    return state.currentNovel;
+  },
+  async createNovel(title, teaser) {
+    const res = await fetch(`${API_BASE}/novels`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, teaser })
+    });
+    return await res.json();
+  },
+  async getAICompletion(messages) {
+    const res = await fetch(`${API_BASE}/ai/completion`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages })
+    });
+    return await res.json();
+  }
 };
 
 // UI Components
@@ -443,30 +441,175 @@ const WritingRoom = () => {
 
 // Application Controller
 const app = {
-  init() {
+  async init() {
+    await api.fetchNovels();
     this.render();
+    this.initGlobalEvents();
   },
   
+  initGlobalEvents() {
+    document.addEventListener('click', async (e) => {
+      if (e.target.closest('.new-file-placeholder') || e.target.closest('.btn-primary') && e.target.innerText.includes('NEW FILE')) {
+        this.showModal('OPEN NEW CASE FILE', 'Project Title', async (title) => {
+          if (!title) return;
+          const novel = await api.createNovel(title, 'A new dark masterpiece.');
+          await api.fetchNovels();
+          this.openNovel(novel.id);
+        });
+      }
+    });
+  },
+
+  showModal(title, placeholder, onConfirm) {
+    const modalRoot = document.getElementById('modal-root');
+    modalRoot.innerHTML = `
+      <div class="modal-overlay active">
+        <div class="modal">
+          <h2 class="serif">${title}</h2>
+          <input type="text" id="modal-input" placeholder="${placeholder}" autofocus>
+          <div class="modal-actions">
+            <button class="btn btn-ghost mono" id="modal-cancel">CANCEL</button>
+            <button class="btn btn-primary mono" id="modal-confirm">INITIALIZE</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const input = document.getElementById('modal-input');
+    const confirm = document.getElementById('modal-confirm');
+    const cancel = document.getElementById('modal-cancel');
+
+    const close = () => {
+      modalRoot.innerHTML = '';
+    };
+
+    confirm.onclick = () => {
+      onConfirm(input.value);
+      close();
+    };
+
+    cancel.onclick = close;
+    
+    input.onkeypress = (e) => {
+      if (e.key === 'Enter') {
+        onConfirm(input.value);
+        close();
+      }
+    };
+    
+    input.focus();
+  },
+
   setLayer(layer) {
     state.currentLayer = layer;
     this.render();
   },
   
-  render() {
+  async render() {
     const root = document.getElementById('app');
+    if (!document.getElementById('modal-root')) {
+      const modalRoot = document.createElement('div');
+      modalRoot.id = 'modal-root';
+      document.body.appendChild(modalRoot);
+    }
+
     if (state.currentLayer === 'vault') {
       root.innerHTML = Vault();
     } else if (state.currentLayer === 'draft-room') {
       root.innerHTML = DraftRoom();
+      this.initCopilot();
     } else if (state.currentLayer === 'writing-room') {
       root.innerHTML = WritingRoom();
+      this.initCopilot();
     }
   },
   
-  openNovel(id) {
-    const novel = state.novels.find(n => n.id === id);
-    state.currentNovel = novel;
+  async openNovel(id) {
+    await api.fetchNovel(id);
     this.setLayer('draft-room');
+  },
+
+  initCopilot() {
+    const input = document.querySelector('.chat-input-container textarea');
+    const sendBtn = document.querySelector('.btn-send');
+    if (!input || !sendBtn) return;
+
+    const sendMessage = async () => {
+      const text = input.value.trim();
+      if (!text) return;
+
+      this.addChatMessage('user', text);
+      input.value = '';
+
+      try {
+        const response = await api.getAICompletion([
+          { role: 'system', content: 'You are NOIR AI, a cinematic co-writer for dark thrillers. You are helpful, clinical, and precise.' },
+          { role: 'user', content: text }
+        ]);
+        
+        const aiText = response.choices[0].message.content;
+        this.addChatMessage('ai', aiText);
+      } catch (err) {
+        this.addChatMessage('ai', 'Connection lost. The abyss does not respond.');
+      }
+    };
+
+    sendBtn.addEventListener('click', sendMessage);
+    input.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+
+    // Wire up Generate buttons in Draft Room
+    document.querySelectorAll('.btn-small').forEach(btn => {
+      if (btn.innerText.includes('Generate') && !btn.dataset.wired) {
+        btn.dataset.wired = "true";
+        btn.addEventListener('click', async () => {
+          const pillar = btn.closest('.pillar');
+          const title = pillar.querySelector('h3').innerText;
+          const body = pillar.querySelector('.prose, .profile-card, .beat-item');
+          
+          btn.disabled = true;
+          btn.innerHTML = '<span class="bolt">⚡</span> Thinking...';
+
+          try {
+            const response = await api.getAICompletion([
+              { role: 'system', content: `You are NOIR AI. Generate a draft ${title} for a dark thriller.` },
+              { role: 'user', content: `Current context: ${body ? body.innerText : 'Empty'}. Please expand or create a new one.` }
+            ]);
+            
+            const aiText = response.choices[0].message.content;
+            if (pillar.querySelector('.summary-text')) {
+              pillar.querySelector('.summary-text').innerHTML = `<p>${aiText.replace(/\n/g, '</p><p>')}</p>`;
+            } else {
+              this.addChatMessage('ai', `Generated for ${title}: ${aiText}`);
+            }
+          } catch (err) {
+            console.error(err);
+          } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<span class="bolt">⚡</span> Generate';
+          }
+        });
+      }
+    });
+  },
+
+  addChatMessage(role, text) {
+    const feed = document.querySelector('.chat-feed');
+    if (!feed) return;
+
+    const msg = document.createElement('div');
+    msg.className = `chat-msg ${role}`;
+    msg.innerHTML = `
+      <div class="msg-author mono">${role === 'user' ? 'YOU' : 'NOIR AI'}</div>
+      <p>${text.replace(/\n/g, '<br>')}</p>
+    `;
+    
+    feed.appendChild(msg);
+    feed.scrollTop = feed.scrollHeight;
   }
 };
 
