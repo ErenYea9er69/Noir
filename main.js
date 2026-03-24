@@ -4,7 +4,10 @@ import './style.css';
 const state = {
   currentLayer: 'vault', // 'vault', 'draft-room', 'writing-room'
   currentNovel: null,
-  novels: []
+  currentChapter: null,
+  novels: [],
+  bible: [],
+  chapters: []
 };
 
 const API_BASE = 'http://localhost:3001/api';
@@ -19,7 +22,31 @@ const api = {
   async fetchNovel(id) {
     const res = await fetch(`${API_BASE}/novels/${id}`);
     state.currentNovel = await res.json();
+    
+    // Fetch Bible and Chapters
+    const [bibleRes, chapterRes] = await Promise.all([
+      fetch(`${API_BASE}/novels/${id}/bible`),
+      fetch(`${API_BASE}/novels/${id}/chapters`)
+    ]);
+    state.bible = await bibleRes.json();
+    state.chapters = await chapterRes.json();
+    
     return state.currentNovel;
+  },
+  async updateBibleEntry(id, content) {
+    await fetch(`${API_BASE}/bible/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content })
+    });
+  },
+  async createBibleEntry(novelId, category, title, content) {
+    const res = await fetch(`${API_BASE}/novels/${novelId}/bible`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ category, title, content })
+    });
+    return await res.json();
   },
   async createNovel(title, teaser) {
     const res = await fetch(`${API_BASE}/novels`, {
@@ -102,10 +129,10 @@ const Vault = () => {
 
     <footer class="vault-footer">
       <div class="footer-status mono">
-        <span class="active-agent-dot"></span> Continuity scanner running on The Surgeon's Garden
+        <span class="active-agent-dot"></span> System idle — ${state.novels.length} files scanned
       </div>
       <div class="footer-summary mono">
-        3 manuscripts • 125,074 words total
+        ${state.novels.length} manuscripts • ${state.novels.reduce((sum, n) => sum + n.words, 0).toLocaleString()} words total
       </div>
     </footer>
   `;
@@ -142,23 +169,12 @@ const DraftRoom = () => {
               <h3>THE CONCISE SUMMARY</h3>
             </div>
             <div class="pillar-actions">
-              <button class="btn btn-small"><span class="bolt">⚡</span> Generate</button>
-              <button class="btn btn-small">Edit</button>
+              <button class="btn btn-small btn-generate"><span class="bolt">⚡</span> Generate</button>
             </div>
           </div>
           <div class="pillar-body">
-            <div class="agent-conflict-card">
-              <div class="conflict-header uppercase mono">
-                <span class="error-dot">●</span> Agent Flag — Chapter 8 Conflict
-              </div>
-              <p class="conflict-text">Detective Hana's motive shifts from justice to vengeance in Ch.8, contradicting her summary arc. Update summary or revise chapter?</p>
-              <div class="conflict-actions">
-                <button class="btn btn-outline">Update Summary</button>
-                <button class="btn btn-outline" onclick="app.setLayer('writing-room')">Revise Ch.8</button>
-              </div>
-            </div>
             <div class="summary-text prose">
-              <p>Detective Hana Yeo is assigned to a serial case where victims are surgically...</p>
+              <p>${state.bible.find(b => b.category === 'summary')?.content || 'No summary yet. AI generate to begin.'}</p>
             </div>
           </div>
         </section>
@@ -171,36 +187,23 @@ const DraftRoom = () => {
               <h3>DEVELOPMENT PROFILES</h3>
             </div>
             <div class="pillar-actions">
-              <button class="btn btn-small"><span class="bolt">⚡</span> Add Profile</button>
+              <button class="btn btn-small btn-add-character">Add Profile</button>
             </div>
           </div>
           <div class="pillar-body scroll-y">
-            <div class="profile-card">
-              <div class="profile-meta mono">PROTAGONIST • LEAD DETECTIVE</div>
-              <h4>Hana Yeo</h4>
-              <div class="tags">
-                <span class="tag">Hyper-logical</span>
-                <span class="tag">Estranged daughter</span>
-                <span class="tag">Mirror of the killer</span>
-              </div>
-            </div>
-            <div class="profile-card">
-              <div class="profile-meta mono">ANTAGONIST • PRIMARY</div>
-              <h4>The Surgeon (unnamed)</h4>
-              <div class="tags">
-                <span class="tag">Practicing physician</span>
-                <span class="tag">Obsessive care</span>
-                <span class="tag">Views victims as art</span>
-              </div>
-            </div>
-            <div class="profile-card">
-              <div class="profile-meta mono">SUPPORTING • AUTHORITY FIGURE</div>
-              <h4>Director Kwon</h4>
-              <div class="tags">
-                <span class="tag">Political pressure</span>
-                <span class="tag">Hides case history</span>
-              </div>
-            </div>
+            ${state.bible.filter(b => b.category === 'character').map(char => {
+              const meta = char.metadata ? JSON.parse(char.metadata) : {};
+              return `
+                <div class="profile-card">
+                  <div class="profile-meta mono">${meta.role?.toUpperCase() || 'SUPPORTING'}</div>
+                  <h4>${char.title}</h4>
+                  <div class="tags">
+                    ${(meta.tags || []).map(t => `<span class="tag">${t}</span>`).join('')}
+                    <span class="tag">Active</span>
+                  </div>
+                </div>
+              `;
+            }).join('') || '<p class="mono opacity-50">No characters profiled yet.</p>'}
           </div>
         </section>
 
@@ -212,27 +215,16 @@ const DraftRoom = () => {
               <h3>BEAT SHEET</h3>
             </div>
             <div class="pillar-actions">
-              <button class="btn btn-small"><span class="bolt">⚡</span> Generate</button>
-              <button class="btn btn-small">Reorder</button>
+              <button class="btn btn-small btn-add-beat">Add Beat</button>
             </div>
           </div>
           <div class="pillar-body scroll-y">
-            <div class="beat-item">
-              <div class="beat-label mono">II • INCITING INCIDENT</div>
-              <p>Hana discovers victim #2 was moved AFTER she visited the scene. Someone knew her route.</p>
-            </div>
-            <div class="beat-item">
-              <div class="beat-label mono">III • MIDPOINT — THE MIRROR</div>
-              <p>A victim leaves Hana a message: "He said you'd understand."</p>
-            </div>
-            <div class="beat-item warning">
-              <div class="beat-label mono">IV • DARK NIGHT — CH.8 <span class="warn-icon">▲</span></div>
-              <p>Hana crosses a line. Method mirrors the killer. [Agent conflict flagged]</p>
-            </div>
-            <div class="beat-item">
-              <div class="beat-label mono">V • RESOLUTION</div>
-              <p>Unwritten — AI suggests ambiguous ending. Reader decides who the killer is.</p>
-            </div>
+            ${state.bible.filter(b => b.category === 'beat').map(beat => `
+              <div class="beat-item">
+                <div class="beat-label mono">${beat.title.toUpperCase()}</div>
+                <p>${beat.content}</p>
+              </div>
+            `).join('') || '<p class="mono opacity-50">No beats outlined yet.</p>'}
           </div>
         </section>
 
@@ -244,26 +236,22 @@ const DraftRoom = () => {
               <h3>MOTIFS • TONE • DIALOGUE</h3>
             </div>
             <div class="pillar-actions">
-              <button class="btn btn-small"><span class="bolt">⚡</span> Generate</button>
+              <button class="btn btn-small btn-add-world">Add Anchor</button>
             </div>
           </div>
           <div class="pillar-body scroll-y">
-            <div class="motif-grid">
-              <div class="motif-tag">Mirrors</div>
-              <div class="motif-tag">Surgical gloves</div>
-              <div class="motif-tag">Rain at crime scenes</div>
-              <div class="motif-tag">Unfinished meals</div>
-              <div class="motif-tag">Hospital white</div>
-              <div class="motif-tag">Specific plants</div>
-            </div>
-            <div class="tone-anchor">
-              <div class="anchor-label mono">TONE ANCHORS</div>
-              <p class="prose italic">Controlled dread. Clinical observation over visceral horror. Every sentence should feel like a scalpel — precise, deliberate, slightly cold.</p>
-            </div>
-            <div class="tone-anchor">
-              <div class="anchor-label mono">DIALOGUE VOICE — HANA</div>
-              <p class="prose italic">"She speaks in questions that aren't questions. Her voice never lifts at the end of a sentence."</p>
-            </div>
+            ${state.bible.filter(b => b.category === 'world').map(world => {
+              const meta = world.metadata ? JSON.parse(world.metadata) : {};
+              return `
+                <div class="motif-grid">
+                  ${(meta.motifs || []).map(m => `<span class="motif-tag">${m}</span>`).join('')}
+                </div>
+                <div class="tone-anchor">
+                  <div class="anchor-label mono">${world.title.toUpperCase()}</div>
+                  <p class="prose italic">${world.content}</p>
+                </div>
+              `;
+            }).join('') || '<p class="mono opacity-50">No world anchors defined yet.</p>'}
           </div>
         </section>
       </div>
@@ -347,45 +335,30 @@ const WritingRoom = () => {
         <div class="sidebar-label mono uppercase">Manuscript</div>
         
         <div class="saga-group">
-          <div class="saga-header mono uppercase">Saga I — The Garden</div>
+          <div class="saga-header mono uppercase">Active Sagas</div>
           <ul class="chapter-list">
-            <li class="chapter-node mono">01 Opening Image</li>
-            <li class="chapter-node mono">02 The Second Body</li>
-            <li class="chapter-node active">
-              <span class="node-title mono">08 The Dark Night</span>
-              <ul class="page-list">
-                <li class="page-node mono">Page 1</li>
-                <li class="page-node mono">Page 2</li>
-                <li class="page-node mono">Page 3</li>
-                <li class="page-node mono">Page 4</li>
-                <li class="page-node active mono">Page 5 ←</li>
-              </ul>
-            </li>
-            <li class="chapter-node mono">09 The Garden Itself</li>
-            <li class="chapter-node mono">10 Her Method</li>
-            <li class="chapter-node mono">11 The Last Arrangement</li>
-          </ul>
-        </div>
-
-        <div class="saga-group">
-          <div class="saga-header mono uppercase">Saga II — The Mirror</div>
-          <ul class="chapter-list">
-            <li class="chapter-node mono idle">12 Unwritten</li>
+            ${state.chapters.map(ch => `
+              <li class="chapter-node mono ${state.currentChapter?.id === ch.id ? 'active' : ''}" 
+                  onclick="app.openChapter(${ch.id})">
+                ${ch.chapter_number.toString().padStart(2, '0')} ${ch.title}
+              </li>
+            `).join('')}
           </ul>
         </div>
       </nav>
 
       <!-- Editor -->
       <article class="editor-container">
-        <div class="editor-header">
-          <h2 class="serif">Chapter 8 — The Dark Night</h2>
-          <div class="page-counter mono">Page 5 of 6</div>
-        </div>
-        <div class="prose-editor" contenteditable="true">
-          <p>...through it with her hands behind her back, like a visitor in a museum she had already decided to rob.</p>
-          <p><span class="highlight">She found the evidence on the third shelf. Her hands were steady, which surprised her. She had expected them to shake, the way they shook the morning her father died, the morning she understood that grief was not sadness but a form of recognition.</span></p>
-          <p>She photographed everything. Then she put one thing in her pocket. She told herself this was methodical. She told herself a lot of things in the next hour, standing in that kitchen that smelled of bleach and something older.</p>
-        </div>
+        ${state.currentChapter ? `
+          <div class="editor-header">
+            <h2 class="serif">Chapter ${state.currentChapter.chapter_number} — ${state.currentChapter.title}</h2>
+          </div>
+          <div class="prose-editor" contenteditable="true" id="editor-node" oninput="app.autoSave()">
+            ${state.currentChapter.content ? `<p>${state.currentChapter.content.replace(/\n/g, '</p><p>')}</p>` : '<p>Begin the first sentence...</p>'}
+          </div>
+        ` : `
+          <div class="editor-placeholder mono">Select a chapter to begin writing.</div>
+        `}
       </article>
 
       <!-- Copilot Panel -->
@@ -529,6 +502,27 @@ const app = {
     this.setLayer('draft-room');
   },
 
+  openChapter(id) {
+    state.currentChapter = state.chapters.find(ch => ch.id === id);
+    this.render();
+  },
+
+  autoSaveTimeout: null,
+  autoSave() {
+    clearTimeout(this.autoSaveTimeout);
+    this.autoSaveTimeout = setTimeout(async () => {
+      const editor = document.getElementById('editor-node');
+      if (!editor || !state.currentChapter) return;
+      const content = editor.innerText;
+      await fetch(`${API_BASE}/chapters/${state.currentChapter.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content })
+      });
+      console.log('Autosaved.');
+    }, 2000);
+  },
+
   initCopilot() {
     const input = document.querySelector('.chat-input-container textarea');
     const sendBtn = document.querySelector('.btn-send');
@@ -581,11 +575,18 @@ const app = {
             ]);
             
             const aiText = response.choices[0].message.content;
-            if (pillar.querySelector('.summary-text')) {
-              pillar.querySelector('.summary-text').innerHTML = `<p>${aiText.replace(/\n/g, '</p><p>')}</p>`;
+            
+            const entry = state.bible.find(b => b.category === (title.includes('Summary') ? 'summary' : title.toLowerCase()));
+            if (entry) {
+              await api.updateBibleEntry(entry.id, aiText);
+              entry.content = aiText;
+            } else if (title.includes('Summary')) {
+              await api.createBibleEntry(state.currentNovel.id, 'summary', 'The Concise Summary', aiText);
+              await api.fetchNovel(state.currentNovel.id);
             } else {
-              this.addChatMessage('ai', `Generated for ${title}: ${aiText}`);
+              this.addChatMessage('ai', `Analysis Complete for ${title}: ${aiText}`);
             }
+            this.render();
           } catch (err) {
             console.error(err);
           } finally {
