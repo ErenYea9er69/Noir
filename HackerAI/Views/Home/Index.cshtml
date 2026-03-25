@@ -1,0 +1,26 @@
+@{
+    ViewData["Title"] = "CyberPentest Explorer";
+}
+
+<div class="row justify-content-center mt-5">
+    <div class="col-md-8 text-center">
+        <h1 class="display-4 mb-4" style="background: linear-gradient(135deg, #38bdf8, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">HackerAI Security Lab</h1>
+        <p class="lead text-muted mb-5">Input your AI security test idea below to generate structured prompt variations and ethical analysis.</p>
+        
+        <div class="card">
+            <form asp-action="Analyze" method="post">
+                <div class="mb-4 text-start">
+                    <label for="testIdea" class="form-label fw-bold">Test Idea / Scenario</label>
+                    <textarea class="form-control" id="testIdea" name="testIdea" rows="4" placeholder="e.g., SQL injection tutorial or XSS vulnerability explanation..." required></textarea>
+                </div>
+                <div class="d-grid">
+                    <button type="submit" class="btn btn-primary btn-lg">Generate Security Variations</button>
+                </div>
+            </form>
+        </div>
+        
+        <div class="mt-5 text-muted small">
+            <p><i class="bi bi-shield-check"></i> Authorized for HackerAI AI security pentesting research only.</p>
+        </div>
+    </div>
+</div>

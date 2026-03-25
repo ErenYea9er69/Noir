@@ -1,0 +1,55 @@
+@model HackerAI.Models.AnalysisViewModel
+
+@{
+    ViewData["Title"] = "Security Analysis Result";
+}
+
+<div class="row justify-content-center mt-5">
+    <div class="col-md-10">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="mb-0">Analysis Result</h2>
+            <a asp-action="Index" class="btn btn-outline-light btn-sm">← New Analysis</a>
+        </div>
+
+        <div class="card mb-4">
+            <h5 class="text-primary mb-3">Original Idea</h5>
+            <p class="lead">@Model.OriginalIdea</p>
+            
+            <div class="mt-4">
+                <h6 class="text-muted mb-2">Extracted Keywords</h6>
+                <div class="d-flex flex-wrap">
+                    @foreach (var kw in Model.Keywords)
+                    {
+                        <span class="keyword-badge">@kw</span>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-7">
+                <div class="card mb-4 h-100">
+                    <h5 class="text-accent mb-4">Prompt Variations</h5>
+                    @foreach (var variation in Model.PromptVariations)
+                    {
+                        <div class="variation-card">
+                            <code class="text-light">@variation</code>
+                            <button class="btn btn-sm btn-link text-primary float-end p-0" onclick="navigator.clipboard.writeText('@variation')">Copy</button>
+                        </div>
+                    }
+                </div>
+            </div>
+            <div class="col-md-5">
+                <div class="card mb-4 h-100">
+                    <h5 class="text-info mb-4">LLM Sample Execution</h5>
+                    <div style="background: rgba(0,0,0,0.3); border-radius: 0.5rem; padding: 1.5rem; font-family: 'Inter', monospace; font-size: 0.9rem; line-height: 1.6;">
+                        @Model.LlmSampleResponse
+                    </div>
+                    <div class="mt-3 text-muted small">
+                        <i class="bi bi-info-circle"></i> This is a simulated response for tutorial purposes.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
